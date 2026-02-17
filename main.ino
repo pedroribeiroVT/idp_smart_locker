@@ -22,17 +22,26 @@ const unsigned long INACTIVITY_TIMEOUT = 30000;
 
 // eeprom write function
 void raw_eeprom_write(unsigned int address, unsigned char data) {
-    while (REG_EECR & (1 << BIT_EEPE));
+    // pre-read to save 1 write cycle if data is identical
+    if (raw_eeprom_read(address) == data) {
+        Serial.print("Endurance Save: Address ");
+        Serial.print(address);
+        Serial.println(" already contains this value. Skipping write.");
+        return;
+    }
+
+    while (REG_EECR & (1 << BIT_EEPE)); // wait for previous write
     REG_EEARL = (unsigned char)address;
     REG_EEDR = data;
     unsigned char sreg_backup = REG_SREG;
-    REG_SREG &= ~(1 << 7); 
-    REG_EECR |= (1 << BIT_EEMPE); 
-    REG_EECR |= (1 << BIT_EEPE);  
+    REG_SREG &= ~(1 << 7); // disable interrupts for 4-cycle window safety
+    REG_EECR |= (1 << BIT_EEMPE);
+    REG_EECR |= (1 << BIT_EEPE);
     REG_SREG = sreg_backup; 
+    Serial.println("Silicon Write Executed.");
 }
 
-// eeprome read function
+// eeprom read function
 unsigned char raw_eeprom_read(unsigned int address) {
     while (REG_EECR & (1 << BIT_EEPE));
     REG_EEARL = (unsigned char)address;
@@ -45,32 +54,34 @@ void setup() {
     pinMode(SERVO_PIN, OUTPUT);
     for (int i=0; i<3; i++) {
         pinMode(COL_PINS[i], OUTPUT);
-        digitalWrite(COL_PINS[i], HIGH); // default
+        digitalWrite(COL_PINS[i], HIGH);
     }
     
-    // set password memory if fresh
+    Serial.println("--- System Initialized ---");
+    // password persistence check
     if (raw_eeprom_read(0) == 0xFF) {
-        Serial.println("Initial Setup: Set 4-digit Password via Serial...");
+        Serial.println("NEW CHIP DETECTED: Set 4-digit Password...");
         while (Serial.available() < 4);
         for (int i = 0; i < 4; i++) {
             raw_eeprom_write(i, Serial.read());
         }
-        Serial.println("Password Saved to EEPROM.");
+    } else {
+        Serial.println("Password loaded from non-volatile memory.");
     }
     lastActivityTime = millis();
 }
 
 void loop() {
-    // inactivity check
     if (currentState != SLEEP && (millis() - lastActivityTime > INACTIVITY_TIMEOUT)) {
         currentState = SLEEP;
-        Serial.println("Transition: SLEEP");
+        Serial.println("Transition: SLEEP (Power Save Mode Active)");
     }
 
     switch (currentState) {
         case SLEEP:
             if (checkForKeypress() != '\0') {
                 currentState = ACTIVE;
+                Serial.println("Wake Up: Transition to ACTIVE");
                 lastActivityTime = millis();
             }
             break;
@@ -80,6 +91,7 @@ void loop() {
             if (key >= '0' && key <= '9') {
                 inputBuffer = String(key);
                 currentState = PASSWORD_INPUT;
+                Serial.print("Input: "); Serial.println(key);
                 lastActivityTime = millis();
             }
             break;
@@ -88,9 +100,11 @@ void loop() {
             char input = checkForKeypress();
             if (input >= '0' && input <= '9') {
                 inputBuffer += input;
+                Serial.print("Input: "); Serial.println(input);
                 lastActivityTime = millis();
             } else if (input == '#') {
                 currentState = VERIFICATION;
+                Serial.println("Transition: VERIFICATION");
             }
             break;
 
@@ -105,12 +119,11 @@ void loop() {
             }
 
             if (match) {
-                Serial.println("UNLOCKED");
-                // TODO: use updated pulsewidth
-                moveServo(1500); 
+                Serial.println("MATCH FOUND: Transition to UNLOCKED");
+                moveServo(1500); // Pulse for Unlocking [cite: 131]
                 currentState = UNLOCKED;
             } else {
-                Serial.println("DENIED");
+                Serial.println("ACCESS DENIED: Error State");
                 currentState = ERROR;
             }
             inputBuffer = "";
@@ -119,13 +132,12 @@ void loop() {
         case UNLOCKED:
             if (checkForKeypress() == '*') { 
                 currentState = LOCKING;
+                Serial.println("Lock Triggered: Transition to LOCKING");
             }
             break;
 
         case LOCKING:
-            Serial.println("Locking...");
-            // TODO: use updated pulsewidth
-            moveServo(600); 
+            moveServo(600);
             currentState = ACTIVE;
             lastActivityTime = millis();
             break;
@@ -133,21 +145,17 @@ void loop() {
         case ERROR:
             delay(1000);
             currentState = ACTIVE;
+            Serial.println("Error Reset: Transition to ACTIVE");
             break;
     }
 }
 
-
-// TODO: replace this baby function
+// add stuff 
 void moveServo(int pulseWidthUs) {
-    digitalWrite(SERVO_PIN, HIGH);
-    delayMicroseconds(pulseWidthUs);
-    digitalWrite(SERVO_PIN, LOW);
-    delay(20); 
+    
 }
 
-// TODO: replace with updated keypad fuction
+// add stuff
 char checkForKeypress() {
-    // pls return a char
-    return '\0'
+    
 }
