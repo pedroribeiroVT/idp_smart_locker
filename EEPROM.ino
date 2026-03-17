@@ -31,6 +31,7 @@ void raw_eeprom_write(unsigned int address, unsigned char data) {
     // disable interrupts for 4-cycle write window
     unsigned char sreg_backup = REG_SREG;
     REG_SREG &= ~(1 << 7);
+    
     REG_EECR |= (1 << BIT_EEMPE);
     REG_EECR |= (1 << BIT_EEPE);
     REG_SREG = sreg_backup;

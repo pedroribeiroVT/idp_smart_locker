@@ -46,9 +46,11 @@ void setup() {
     // initialize hardware modules
     servo_init();
     keypad_init();
+    init_watchdog();
     
     // check if password exists in EEPROM
     if (!isPasswordSet()) {
+        set_clock_speed(true); // set CPU to 250kHz
         Serial.println("[SETUP] Arduino Detected");
         Serial.println("[SETUP] Enter 4-digit password on KEYPAD:");
         Serial.println("[SETUP] Press # when done");
@@ -81,7 +83,7 @@ void setup() {
                 break;
             }
         }
-        
+        set_clock_speed(false); // set CPU at 16MHz
         savePassword(newPassword);
         Serial.println("[SETUP] Password set successfully!");
     } else {
@@ -106,12 +108,12 @@ void loop() {
         if (millis() - lastActivityTime > INACTIVITY_TIMEOUT) {
             currentState = SLEEP;
             Serial.println("\n[STATE] -> SLEEP");
+            enter_deep_sleep();
         }
     }
 
     // STATE switch cases
     switch (currentState) {
-        
         // SLEEP: goes into low power
         case SLEEP: {
             char key = keypad_get_key();
@@ -137,10 +139,10 @@ void loop() {
             break;
         }
 
-        // PASSWORD_INPUT: - Collecting digits
+        // PASSWORD_INPUT: collecting digits
         case PASSWORD_INPUT: {
+            set_clock_speed(true);
             char key = keypad_get_key();
-            
             if (key >= '0' && key <= '9') {
                 inputBuffer += key;
                 lastActivityTime = millis();
@@ -148,6 +150,7 @@ void loop() {
                 Serial.println(key);
             }
             else if (key == '#') {
+                set_clock_speed(false);
                 currentState = VERIFICATION;
                 Serial.println("\n[STATE] -> VERIFICATION");
             }
@@ -180,7 +183,7 @@ void loop() {
             break;
         }
 
-        // UNLOCKED: Waiting for lock command, hold # for 3 seconds to reset password
+        // UNLOCKED: waiting for lock command, hold # for 3 seconds to reset password
         case UNLOCKED: {
             char key = scanKeyOnce();
             
