@@ -65,7 +65,7 @@ char keypad_get_key() {
         return k;
     }
     
-    _lastKey = k;s
+    _lastKey = k;
     delay(100);
     return '\0';
 }

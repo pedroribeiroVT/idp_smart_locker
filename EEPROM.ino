@@ -29,11 +29,15 @@ void raw_eeprom_write(unsigned int address, unsigned char data) {
     REG_EEDR = data;
     
     // disable interrupts for 4-cycle write window
+    // FIX(4): use direct assignment (=) not read-modify-write (|=).
+    // |= compiles to 3+ instructions per line; the ATmega328P datasheet
+    // (section 8.5.2) requires EEPE to be set within 4 clock cycles of
+    // EEMPE. Writing both bits together in a single store satisfies that.
     unsigned char sreg_backup = REG_SREG;
     REG_SREG &= ~(1 << 7);
-    
-    REG_EECR |= (1 << BIT_EEMPE);
-    REG_EECR |= (1 << BIT_EEPE);
+
+    REG_EECR = (1 << BIT_EEMPE);
+    REG_EECR = (1 << BIT_EEMPE) | (1 << BIT_EEPE);
     REG_SREG = sreg_backup;
     
     Serial.print("[EEPROM] Write 0x");

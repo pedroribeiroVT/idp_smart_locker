@@ -5,24 +5,61 @@ void servo_send_pulse(int pulseUs) {
     delayMicroseconds(SERVO_PERIOD_US - pulseUs);
 }
 
-void servo_move(int pulseUs) {
-    int iterations = SERVO_HOLD_TIME_MS / 20; // each pulse = ~20ms
+int servo_read_current() {
+    return analogRead(CURRENT_SENSE_PIN);
+}
+
+// Returns true if move completed normally, false if blockage detected (and reverted).
+bool servo_move(int targetPulseUs, int prevPulseUs) {
+    int iterations = SERVO_HOLD_TIME_MS / 20; // 500ms / 20ms = 25 iterations
+    int stallCount = 0;
+
     for (int i = 0; i < iterations; i++) {
-        servo_send_pulse(pulseUs);
+        servo_send_pulse(targetPulseUs);
+
+        // Skip stall checks during initial movement window
+        if (i < SERVO_MOVE_WINDOW_MS / 20) continue;
+
+        int adcVal = servo_read_current();
+        if (adcVal > SERVO_STALL_THRESHOLD) {
+            stallCount++;
+        } else {
+            stallCount = 0;
+        }
+
+        if (stallCount >= SERVO_STALL_CONSEC) {
+            Serial.println("[SERVO] BLOCKED - reverting");
+            for (int j = 0; j < 15; j++) {
+                servo_send_pulse(prevPulseUs);
+            }
+            return false;
+        }
     }
+
     Serial.print("[SERVO] Position set to ");
-    Serial.print(pulseUs);
+    Serial.print(targetPulseUs);
     Serial.println(" us");
+    return true;
 }
 
-void servo_lock() {
-    servo_move(SERVO_LOCKED_PULSE);
-    Serial.println("[SERVO] LOCKED");
+bool servo_lock() {
+    bool ok = servo_move(SERVO_LOCKED_PULSE, SERVO_UNLOCKED_PULSE);
+    if (ok) {
+        // Record the actual hold window so battery_life_report() can account
+        // for this servo operation's current draw.
+        cycle_mark_servo(SERVO_HOLD_TIME_MS);
+        Serial.println("[SERVO] LOCKED");
+    }
+    return ok;
 }
 
-void servo_unlock() {
-    servo_move(SERVO_UNLOCKED_PULSE);
-    Serial.println("[SERVO] UNLOCKED");
+bool servo_unlock() {
+    bool ok = servo_move(SERVO_UNLOCKED_PULSE, SERVO_LOCKED_PULSE);
+    if (ok) {
+        cycle_mark_servo(SERVO_HOLD_TIME_MS);
+        Serial.println("[SERVO] UNLOCKED");
+    }
+    return ok;
 }
 
 void servo_init() {
@@ -43,6 +80,6 @@ void servo_test(int pulseUs) {
     Serial.print("[SERVO TEST] Sending pulse: ");
     Serial.print(pulseUs);
     Serial.println(" us");
-    servo_move(pulseUs);
+    servo_move(pulseUs, pulseUs); // no revert target for manual test
 }
 
