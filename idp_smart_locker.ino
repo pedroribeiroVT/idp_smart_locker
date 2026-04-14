@@ -191,14 +191,51 @@ void setup() {
     led_init();
     setLedMode(LED_OFF_MODE);
 
+    init_watchdog();
+    
     // check if password exists in EEPROM
     if (!isPasswordSet()) {
+        set_clock_speed(true); // set CPU to 250kHz
         Serial.println("[SETUP] Arduino Detected");
         setupNewPasswordFlow(
             "[SETUP] Enter 4-digit password on KEYPAD:",
             "[SETUP] Press # when done",
             "[SETUP] Password set successfully!"
         );
+        Serial.println("[SETUP] Enter 4-digit password on KEYPAD:");
+        Serial.println("[SETUP] Press # when done");
+        
+        // Collect password from keypad
+        char newPassword[PASSWORD_LENGTH + 1];
+        int digitCount = 0;
+        
+        while (digitCount < PASSWORD_LENGTH) {
+            char key = keypad_get_key();
+            if (key >= '0' && key <= '9') {
+                newPassword[digitCount] = key;
+                digitCount++;
+                Serial.print("[SETUP] Digit ");
+                Serial.print(digitCount);
+                Serial.println(": *");  // Hide actual digit for security
+            }
+            else if (key == '*' && digitCount > 0) {
+                digitCount--;
+                Serial.println("[SETUP] Digit removed");
+            }
+        }
+        newPassword[PASSWORD_LENGTH] = '\0';
+        
+        // Wait for # to confirm
+        Serial.println("[SETUP] Press # to confirm password");
+        while (true) {
+            char key = keypad_get_key();
+            if (key == '#') {
+                break;
+            }
+        }
+        set_clock_speed(false); // set CPU at 16MHz
+        savePassword(newPassword);
+        Serial.println("[SETUP] Password set successfully!");
     } else {
         Serial.println("[SETUP] Password loaded from EEPROM");
         setLedMode(LED_OFF_MODE);
@@ -227,11 +264,12 @@ void loop() {
             currentState = SLEEP;
             setLedMode(LED_OFF_MODE);
             Serial.println("\n[STATE] -> SLEEP");
+            enter_deep_sleep();
         }
     }
 
     switch (currentState) {
-
+        // SLEEP: goes into low power
         case SLEEP: {
             setLedMode(LED_OFF_MODE);
             char key = keypad_get_key();
@@ -270,6 +308,10 @@ void loop() {
                 triggerLedPulse();
             }
 
+        // PASSWORD_INPUT: collecting digits
+        case PASSWORD_INPUT: {
+            set_clock_speed(true);
+            char key = keypad_get_key();
             if (key >= '0' && key <= '9') {
                 inputBuffer += key;
                 lastActivityTime = millis();
@@ -277,6 +319,7 @@ void loop() {
                 Serial.println(key);
             }
             else if (key == '#') {
+                set_clock_speed(false);
                 currentState = VERIFICATION;
                 Serial.println("\n[STATE] -> VERIFICATION");
             }
