@@ -151,11 +151,6 @@ void setup() {
     if (!isPasswordSet()) {
         set_clock_speed(true); // set CPU to 250kHz
         Serial.println("[SETUP] Arduino Detected");
-        setupNewPasswordFlow(
-            "[SETUP] Enter 4-digit password on KEYPAD:",
-            "[SETUP] Press # when done",
-            "[SETUP] Password set successfully!"
-        );
         Serial.println("[SETUP] Enter 4-digit password on KEYPAD:");
         Serial.println("[SETUP] Press # when done");
         
@@ -259,14 +254,6 @@ void loop() {
             break;
         }
 
-        case PASSWORD_INPUT: {
-            setLedMode(LED_OFF_MODE);
-            char key = keypad_get_key();
-
-            if (key != '\0') {
-                triggerLedPulse();
-            }
-
         // PASSWORD_INPUT: collecting digits
         case PASSWORD_INPUT: {
             setLedMode(LED_OFF_MODE);
@@ -336,12 +323,6 @@ void loop() {
                     clearPassword();
                     servo_lock();
                     hashHoldStart = 0;
-
-                    setupNewPasswordFlow(
-                        "[SETUP] Enter new 4-digit password on KEYPAD:",
-                        "[SETUP] Press # when done",
-                        "[SETUP] New password set!"
-                    );
 
                     currentState = ACTIVE;
                     setLedMode(LED_OFF_MODE);
