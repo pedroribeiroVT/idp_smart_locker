@@ -1,7 +1,7 @@
-const int SERVO_PIN = 10;              // servo PWM output
-const int KEYPAD_ANALOG_PIN = A0;     // analog input for keypad rows
-const int COL_PINS[] = {5, 4, 3};     // keypad column outputs
-const int LED_PIN = 2;
+const int SERVO_PIN = 10; // servo PWM output
+const int KEYPAD_ANALOG_PIN = A0; // analog input for keypad rows
+const int COL_PINS[] = {5, 4, 3}; // keypad column outputs
+const int LED_PIN = 2; // led pin
 
 // password config
 #define PASSWORD_LENGTH 4
@@ -133,55 +133,7 @@ void updateLed() {
     }
 }
 
-// ---------- Password setup/reset helper ----------
-void setupNewPasswordFlow(const char *startMsg1, const char *startMsg2, const char *doneMsg) {
-    setLedMode(LED_BLINK_MODE);
 
-    Serial.println(startMsg1);
-    Serial.println(startMsg2);
-
-    char newPassword[PASSWORD_LENGTH + 1];
-    int digitCount = 0;
-
-    while (digitCount < PASSWORD_LENGTH) {
-        updateLed();
-        char key = keypad_get_key();
-
-        if (key >= '0' && key <= '9') {
-            newPassword[digitCount] = key;
-            digitCount++;
-            Serial.print("[SETUP] Digit ");
-            Serial.print(digitCount);
-            Serial.println(": *");
-        }
-        else if (key == '*' && digitCount > 0) {
-            digitCount--;
-            Serial.println("[SETUP] Digit removed");
-        }
-    }
-
-    newPassword[PASSWORD_LENGTH] = '\0';
-
-    Serial.println("[SETUP] Press # to confirm password");
-    while (true) {
-        updateLed();
-        char key = keypad_get_key();
-
-        if (key != '\0') {
-            triggerLedPulse();
-        }
-
-        if (key == '#') {
-            break;
-        }
-    }
-
-    savePassword(newPassword);
-    Serial.println(doneMsg);
-    setLedMode(LED_OFF_MODE);
-}
-
-// ---------- Main setup ----------
 void setup() {
     Serial.begin(9600);
 
@@ -192,6 +144,8 @@ void setup() {
     setLedMode(LED_OFF_MODE);
 
     init_watchdog();
+    led_init();
+    setLedMode(LED_OFF_MODE);
     
     // check if password exists in EEPROM
     if (!isPasswordSet()) {
@@ -210,7 +164,9 @@ void setup() {
         int digitCount = 0;
         
         while (digitCount < PASSWORD_LENGTH) {
+            updateLed();
             char key = keypad_get_key();
+
             if (key >= '0' && key <= '9') {
                 newPassword[digitCount] = key;
                 digitCount++;
@@ -228,6 +184,7 @@ void setup() {
         // Wait for # to confirm
         Serial.println("[SETUP] Press # to confirm password");
         while (true) {
+            updateLed();
             char key = keypad_get_key();
             if (key == '#') {
                 break;
@@ -264,6 +221,7 @@ void loop() {
             currentState = SLEEP;
             setLedMode(LED_OFF_MODE);
             Serial.println("\n[STATE] -> SLEEP");
+            setLedMode(LED_OFF_MODE);
             enter_deep_sleep();
         }
     }
@@ -280,6 +238,7 @@ void loop() {
                 Serial.println("\n[STATE] -> ACTIVE");
                 Serial.println("Enter password:");
             }
+            setLedMode(LED_OFF_MODE);
             break;
         }
 
@@ -310,8 +269,12 @@ void loop() {
 
         // PASSWORD_INPUT: collecting digits
         case PASSWORD_INPUT: {
+            setLedMode(LED_OFF_MODE);
             set_clock_speed(true);
             char key = keypad_get_key();
+            if (key != '\0') {
+                triggerLedPulse();
+            }
             if (key >= '0' && key <= '9') {
                 inputBuffer += key;
                 lastActivityTime = millis();
@@ -411,6 +374,7 @@ void loop() {
         case ERROR: {
             setLedMode(LED_OFF_MODE);
             delay(2000);
+            setLedMode(LED_OFF_MODE);
             currentState = ACTIVE;
             lastActivityTime = millis();
             Serial.println("\n[STATE] -> ACTIVE");
