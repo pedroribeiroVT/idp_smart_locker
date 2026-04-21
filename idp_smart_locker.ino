@@ -183,7 +183,6 @@ void loop() {
             Serial.println("\n[STATE] -> SLEEP");
             Serial.flush();
             setLedMode(LED_OFF_MODE);
-            battery_check_and_alert();
             enter_deep_sleep();
         }
     }
@@ -196,6 +195,8 @@ void loop() {
 
             if (key != '\0') {
                 currentState = ACTIVE;
+                battery_check_and_alert();
+                report_after_wake_hardcoded();
                 lastActivityTime = millis();
                 Serial.println("\n[STATE] -> ACTIVE");
                 Serial.println("Enter password:");
@@ -256,6 +257,7 @@ void loop() {
             if (verifyPassword(inputBuffer)) {
                 Serial.println("[VERIFY] ACCESS GRANTED");
                 servo_unlock();
+                report_after_unlocked_hardcoded();
                 currentState = UNLOCKED;
                 setLedMode(LED_ON_MODE);
                 Serial.println("\n[STATE] -> UNLOCKED");
@@ -293,6 +295,7 @@ void loop() {
                         "[RESET] New password hashed and saved"
                     );
                     servo_lock();
+                    report_after_lock_hardcoded();
                     inputBuffer = "";
                     hashHoldStart = 0;
 
@@ -316,6 +319,7 @@ void loop() {
 
         case LOCKING: {
             servo_lock();
+            report_after_lock_hardcoded();
             setLedMode(LED_OFF_MODE);
             currentState = ACTIVE;
             lastActivityTime = millis();
