@@ -32,23 +32,6 @@
 
 #define SREG   (*(volatile uint8_t *)(0x5F)) // status register
 
-#define BATT_SENSE_PIN A2
-#define BATT_LED_PIN 2
- 
-// R1 = 470k / R2 = 1470k = 0.3197
-// V_pin = V_batt × 0.3197, so V_batt = V_pin / 0.3197
-#define DIVIDER_RATIO    0.3197f
-#define ADC_REF_VOLTAGE  5.0f
- 
-#define BATT_LOW_VOLTAGE    6.5f
-#define BATT_CRIT_VOLTAGE   5.8f
- 
-#define BATT_LED_FLASH_MS      100
-#define BATT_LED_FLASHES       3
-#define BATT_LED_CRIT_FLASHES  6
- 
-static float _last_batt_voltage = 0.0f;
-
 volatile bool watchdogWakeTriggered = false;
 
 ISR(WDT_vect) {
@@ -72,7 +55,6 @@ void enter_deep_sleep() {
     // wake up 
     SMCR &= ~(1 << SE);
     ADCSRA |= (1 << ADEN);
-    battery_check_and_alert();
 }
 
 void init_watchdog() {
@@ -104,59 +86,4 @@ void set_clock_speed(bool slow) {
     else { CLKPR = 0; } // set to 250MHz
 
     SREG = saveSREG; // restores interrupts
-}
-
-// battery_monitor.h — milestone 4a: battery level check + low-battery alert
-// Hardware: 1MΩ (batt+ to A2), 470kΩ (A2 to GND), 100nF cap (A2 to GND),
-//           LED + 1kΩ on D8.
- 
-void battery_monitor_init() {
-  pinMode(BATT_LED_PIN, OUTPUT);
-  digitalWrite(BATT_LED_PIN, LOW);
-}
- 
-// Average 4 ADC samples, convert to battery voltage via divider ratio.
-// Costs ~50 µs total — called once per wake cycle.
-float battery_read_voltage() {
-  long sum = 0;
-  for (int i = 0; i < 4; i++) {
-    sum += analogRead(BATT_SENSE_PIN);
-    delayMicroseconds(200);
-  }
-  float pin_v = ((float)sum / 4.0f / 1023.0f) * ADC_REF_VOLTAGE;
-  _last_batt_voltage = pin_v / DIVIDER_RATIO;
-  return _last_batt_voltage;
-}
- 
-void battery_led_flash(int flashes) {
-  for (int i = 0; i < flashes; i++) {
-    digitalWrite(BATT_LED_PIN, HIGH);
-    delay(BATT_LED_FLASH_MS);
-    digitalWrite(BATT_LED_PIN, LOW);
-    if (i < flashes - 1) delay(BATT_LED_FLASH_MS);
-  }
-}
-
-uint8_t battery_check_and_alert() {
-  float v = battery_read_voltage();
- 
-  Serial.print(("[BATT] Voltage: "));
-  Serial.print(v, 2);
-  Serial.println((" V"));
- 
-  if (v <= BATT_CRIT_VOLTAGE) {
-    Serial.println(F("[BATT] *** CRITICAL — replace battery now ***"));
-    battery_led_flash(BATT_LED_CRIT_FLASHES);
-    return 2;
-  }
-  if (v <= BATT_LOW_VOLTAGE) {
-    Serial.println(F("[BATT] * LOW — replace battery soon *"));
-    battery_led_flash(BATT_LED_FLASHES);
-    return 1;
-  }
-  return 0;
-}
- 
-float battery_last_voltage() {
-  return _last_batt_voltage;
 }
