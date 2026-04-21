@@ -143,6 +143,8 @@ void setup() {
     servo_init();
     keypad_init();
     led_init();
+    battery_monitor_init();
+    battery_check_and_alert();
     setLedMode(LED_OFF_MODE);
 
     init_watchdog();
@@ -215,6 +217,7 @@ void loop() {
             setLedMode(LED_OFF_MODE);
             Serial.println("\n[STATE] -> SLEEP");
             setLedMode(LED_OFF_MODE);
+            battery_check_and_alert();
             enter_deep_sleep();
         }
     }
