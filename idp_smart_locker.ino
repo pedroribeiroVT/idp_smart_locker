@@ -11,7 +11,7 @@ const int LED_PIN = 2; // led pin
 #define SERVO_LOCKED_PULSE   1600
 #define SERVO_UNLOCKED_PULSE 2560
 #define SERVO_PERIOD_US      20000
-#define SERVO_HOLD_TIME_MS   500
+#define SERVO_HOLD_TIME_MS   750
 
 // keypad config
 #define KEYPAD_SETTLE_US   800
@@ -63,7 +63,6 @@ void led_init();
 void setLedMode(LedMode mode);
 void triggerLedPulse();
 void updateLed();
-
 void setupNewPasswordFlow(const char *startMsg1, const char *startMsg2, const char *doneMsg);
 
 // ---------- LED functions ----------
@@ -136,63 +135,24 @@ void updateLed() {
 
 void setup() {
     Serial.begin(9600);
+    delay(250);
+    Serial.println("[BOOT] Setup started");
 
     // initialize hardware modules
     servo_init();
     keypad_init();
     led_init();
+    battery_monitor_init();
+    battery_check_and_alert();
     setLedMode(LED_OFF_MODE);
 
     init_watchdog();
-    led_init();
-    setLedMode(LED_OFF_MODE);
     
     // check if password exists in EEPROM
     if (!isPasswordSet()) {
-        set_clock_speed(true); // set CPU to 250kHz
-        Serial.println("[SETUP] Arduino Detected");
-        setupNewPasswordFlow(
-            "[SETUP] Enter 4-digit password on KEYPAD:",
-            "[SETUP] Press # when done",
-            "[SETUP] Password set successfully!"
-        );
-        Serial.println("[SETUP] Enter 4-digit password on KEYPAD:");
-        Serial.println("[SETUP] Press # when done");
-        
-        // Collect password from keypad
-        char newPassword[PASSWORD_LENGTH + 1];
-        int digitCount = 0;
-        
-        while (digitCount < PASSWORD_LENGTH) {
-            updateLed();
-            char key = keypad_get_key();
-
-            if (key >= '0' && key <= '9') {
-                newPassword[digitCount] = key;
-                digitCount++;
-                Serial.print("[SETUP] Digit ");
-                Serial.print(digitCount);
-                Serial.println(": *");  // Hide actual digit for security
-            }
-            else if (key == '*' && digitCount > 0) {
-                digitCount--;
-                Serial.println("[SETUP] Digit removed");
-            }
-        }
-        newPassword[PASSWORD_LENGTH] = '\0';
-        
-        // Wait for # to confirm
-        Serial.println("[SETUP] Press # to confirm password");
-        while (true) {
-            updateLed();
-            char key = keypad_get_key();
-            if (key == '#') {
-                break;
-            }
-        }
-        set_clock_speed(false); // set CPU at 16MHz
-        savePassword(newPassword);
-        Serial.println("[SETUP] Password set successfully!");
+        initializeDefaultPassword();
+        Serial.println("[SETUP] No password record found");
+        Serial.println("[SETUP] Default password 1234 has been hashed and stored");
     } else {
         Serial.println("[SETUP] Password loaded from EEPROM");
         setLedMode(LED_OFF_MODE);
@@ -205,7 +165,7 @@ void setup() {
     Serial.println("-----------------------------------------");
     Serial.println("System LOCKED");
     Serial.println("Enter password + # to unlock");
-    Serial.println("When unlocked: * to lock, hold # to reset");
+    Serial.println("When unlocked: * to lock, hold # to set new password");
     Serial.println("-----------------------------------------");
 
     lastActivityTime = millis();
@@ -221,6 +181,7 @@ void loop() {
             currentState = SLEEP;
             setLedMode(LED_OFF_MODE);
             Serial.println("\n[STATE] -> SLEEP");
+            Serial.flush();
             setLedMode(LED_OFF_MODE);
             enter_deep_sleep();
         }
@@ -234,11 +195,15 @@ void loop() {
 
             if (key != '\0') {
                 currentState = ACTIVE;
+                battery_check_and_alert();
+                report_after_wake_hardcoded();
                 lastActivityTime = millis();
                 Serial.println("\n[STATE] -> ACTIVE");
                 Serial.println("Enter password:");
             }
-            setLedMode(LED_OFF_MODE);
+            else {
+                enter_deep_sleep();
+            }
             break;
         }
 
@@ -259,18 +224,9 @@ void loop() {
             break;
         }
 
-        case PASSWORD_INPUT: {
-            setLedMode(LED_OFF_MODE);
-            char key = keypad_get_key();
-
-            if (key != '\0') {
-                triggerLedPulse();
-            }
-
         // PASSWORD_INPUT: collecting digits
         case PASSWORD_INPUT: {
             setLedMode(LED_OFF_MODE);
-            set_clock_speed(true);
             char key = keypad_get_key();
             if (key != '\0') {
                 triggerLedPulse();
@@ -282,7 +238,6 @@ void loop() {
                 Serial.println(key);
             }
             else if (key == '#') {
-                set_clock_speed(false);
                 currentState = VERIFICATION;
                 Serial.println("\n[STATE] -> VERIFICATION");
             }
@@ -302,6 +257,7 @@ void loop() {
             if (verifyPassword(inputBuffer)) {
                 Serial.println("[VERIFY] ACCESS GRANTED");
                 servo_unlock();
+                report_after_unlocked_hardcoded();
                 currentState = UNLOCKED;
                 setLedMode(LED_ON_MODE);
                 Serial.println("\n[STATE] -> UNLOCKED");
@@ -333,15 +289,15 @@ void loop() {
                 }
                 else if (millis() - hashHoldStart >= RESET_HOLD_TIME) {
                     Serial.println("\n[RESET] Password reset triggered!");
-                    clearPassword();
-                    servo_lock();
-                    hashHoldStart = 0;
-
                     setupNewPasswordFlow(
-                        "[SETUP] Enter new 4-digit password on KEYPAD:",
-                        "[SETUP] Press # when done",
-                        "[SETUP] New password set!"
+                        "[RESET] Enter new 4-digit password on KEYPAD:",
+                        "[RESET] Use * to delete digits",
+                        "[RESET] New password hashed and saved"
                     );
+                    servo_lock();
+                    report_after_lock_hardcoded();
+                    inputBuffer = "";
+                    hashHoldStart = 0;
 
                     currentState = ACTIVE;
                     setLedMode(LED_OFF_MODE);
@@ -363,6 +319,7 @@ void loop() {
 
         case LOCKING: {
             servo_lock();
+            report_after_lock_hardcoded();
             setLedMode(LED_OFF_MODE);
             currentState = ACTIVE;
             lastActivityTime = millis();
