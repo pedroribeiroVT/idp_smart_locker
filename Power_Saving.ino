@@ -8,9 +8,16 @@
 #define BODS   6                             // brown-out detector sleep
 #define BODSE  5                             // brown-out detector sleep enable
 
+#ifndef MCUSR
+#define MCUSR  (*(volatile uint8_t *)(0x54)) // MCU status register
+#endif
+#define WDRF   3                             // watchdog reset flag
+
 #define PRR    (*(volatile uint8_t *)(0x64)) // power reduction register
 
 #define WDTCSR (*(volatile uint8_t *)(0x60)) // watchdog timer control register
+#define WDIF   7                             // watchdog interrupt flag
+#define WDIE   6                             // watchdog interrupt enable
 #define WDCE   4                             // watchdog change enable
 #define WDE    3                             // watchdog system reset enable
 #define WDP3   5                             // watchdog prescaler bit 3
@@ -25,7 +32,14 @@
 
 #define SREG   (*(volatile uint8_t *)(0x5F)) // status register
 
+volatile bool watchdogWakeTriggered = false;
+
+ISR(WDT_vect) {
+    watchdogWakeTriggered = true;
+}
+
 void enter_deep_sleep() {
+    watchdogWakeTriggered = false;
     ADCSRA &= ~(1 << ADEN); // disable ADC to save power
 
     // configure sleep mode 
@@ -45,13 +59,14 @@ void enter_deep_sleep() {
 
 void init_watchdog() {
     cli(); // disable interrupts during setup
+    MCUSR &= ~(1 << WDRF);
     asm volatile("wdr"); // reset WDT timer
 
     // set WDCE and WDE to allow changes
-    WDTCSR |= (1 << WDCE) | (1 << WDE);
+    WDTCSR = (1 << WDCE) | (1 << WDE);
 
-    // 4 second timeout setup
-    WDTCSR = (1 << WDE) | (1 << WDP3);
+    // interrupt mode only: wake from sleep without rebooting the MCU
+    WDTCSR = (1 << WDIE) | (1 << WDP3);
     
     sei(); // re-enable interrups
 }

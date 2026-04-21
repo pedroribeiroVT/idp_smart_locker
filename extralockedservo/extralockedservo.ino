@@ -1,5 +1,10 @@
-// Servo uses Timer1 channel B on Arduino D10 (OC1B).
-// Physical pin on ATmega328P DIP = 16.
+const int SERVO_PIN = 10;  // Arduino D10 = Timer1 OC1B
+
+#define SERVO_LOCKED_PULSE_US    1600
+#define SERVO_UNLOCKED_PULSE_US  2560
+#define SERVO_PERIOD_US         20000
+#define SERVO_MOVE_HOLD_MS        750
+#define SERVO_STATE_DELAY_MS     2500
 
 void servo_write_pulse_us(int pulseUs) {
     OCR1B = pulseUs * 2;  // Timer1 runs at 2 MHz with prescaler 8
@@ -7,9 +12,7 @@ void servo_write_pulse_us(int pulseUs) {
 
 void servo_move(int pulseUs) {
     servo_write_pulse_us(pulseUs);
-
-    // keep PWM running long enough for servo to move
-    delay(SERVO_HOLD_TIME_MS);
+    delay(SERVO_MOVE_HOLD_MS);
 
     Serial.print("[SERVO] Pulse set to ");
     Serial.print(pulseUs);
@@ -17,12 +20,12 @@ void servo_move(int pulseUs) {
 }
 
 void servo_lock() {
-    servo_move(SERVO_LOCKED_PULSE);
+    servo_move(SERVO_LOCKED_PULSE_US);
     Serial.println("[SERVO] LOCKED");
 }
 
 void servo_unlock() {
-    servo_move(SERVO_UNLOCKED_PULSE);
+    servo_move(SERVO_UNLOCKED_PULSE_US);
     Serial.println("[SERVO] UNLOCKED");
 }
 
@@ -46,20 +49,30 @@ void servo_init() {
     // Prescaler = 8.
     TCCR1B |= (1 << CS11);
 
-    servo_write_pulse_us(SERVO_LOCKED_PULSE);
+    servo_write_pulse_us(SERVO_LOCKED_PULSE_US);
 
     Serial.println("[SERVO] Timer1 initialized on D10");
     Serial.print("[SERVO] Locked pulse: ");
-    Serial.print(SERVO_LOCKED_PULSE);
+    Serial.print(SERVO_LOCKED_PULSE_US);
     Serial.println(" us");
     Serial.print("[SERVO] Unlocked pulse: ");
-    Serial.print(SERVO_UNLOCKED_PULSE);
+    Serial.print(SERVO_UNLOCKED_PULSE_US);
     Serial.println(" us");
 }
 
-void servo_test(int pulseUs) {
-    Serial.print("[SERVO TEST] Sending pulse: ");
-    Serial.print(pulseUs);
-    Serial.println(" us");
-    servo_move(pulseUs);
+void setup() {
+    Serial.begin(9600);
+    delay(250);
+    Serial.println("[BOOT] Extra locked servo test");
+
+    servo_init();
+    servo_lock();
+}
+
+void loop() {
+    delay(SERVO_STATE_DELAY_MS);
+    servo_unlock();
+
+    delay(SERVO_STATE_DELAY_MS);
+    servo_lock();
 }

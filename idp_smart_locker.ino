@@ -11,7 +11,7 @@ const int LED_PIN = 2; // led pin
 #define SERVO_LOCKED_PULSE   1600
 #define SERVO_UNLOCKED_PULSE 2560
 #define SERVO_PERIOD_US      20000
-#define SERVO_HOLD_TIME_MS   500
+#define SERVO_HOLD_TIME_MS   750
 
 // keypad config
 #define KEYPAD_SETTLE_US   800
@@ -136,6 +136,8 @@ void updateLed() {
 
 void setup() {
     Serial.begin(9600);
+    delay(250);
+    Serial.println("[BOOT] Setup started");
 
     // initialize hardware modules
     servo_init();
@@ -144,12 +146,9 @@ void setup() {
     setLedMode(LED_OFF_MODE);
 
     init_watchdog();
-    led_init();
-    setLedMode(LED_OFF_MODE);
     
     // check if password exists in EEPROM
     if (!isPasswordSet()) {
-        set_clock_speed(true); // set CPU to 250kHz
         Serial.println("[SETUP] Arduino Detected");
         Serial.println("[SETUP] Enter 4-digit password on KEYPAD:");
         Serial.println("[SETUP] Press # when done");
@@ -185,7 +184,6 @@ void setup() {
                 break;
             }
         }
-        set_clock_speed(false); // set CPU at 16MHz
         savePassword(newPassword);
         Serial.println("[SETUP] Password set successfully!");
     } else {
@@ -233,7 +231,9 @@ void loop() {
                 Serial.println("\n[STATE] -> ACTIVE");
                 Serial.println("Enter password:");
             }
-            setLedMode(LED_OFF_MODE);
+            else {
+                enter_deep_sleep();
+            }
             break;
         }
 
@@ -257,7 +257,6 @@ void loop() {
         // PASSWORD_INPUT: collecting digits
         case PASSWORD_INPUT: {
             setLedMode(LED_OFF_MODE);
-            set_clock_speed(true);
             char key = keypad_get_key();
             if (key != '\0') {
                 triggerLedPulse();
@@ -269,7 +268,6 @@ void loop() {
                 Serial.println(key);
             }
             else if (key == '#') {
-                set_clock_speed(false);
                 currentState = VERIFICATION;
                 Serial.println("\n[STATE] -> VERIFICATION");
             }
